@@ -1,3 +1,15 @@
+/*
+    AUTHOR : PRASHANT DANDRIYAL
+    DATE : 11/4/2019
+    ***************************
+ CONNECTIONS FOR THE TIVA LAUNCHPAD (EK-TM4C123GXL) AND TEMPERATURE SENSOR IC (LM35)
+ VBUS   -->     VCC
+ GND    -->     GND
+ OUT    -->     PE3
+
+# THE PROGRAM SHOWS THE IMPLEMENTAION OF THE METHODS TO USE ADC MODULE PRESENT IN THE LAUNCHPAD (we use ADC0 here)
+*/
+
 //Header Files needed to access the TIVA APIs
 #include <stdint.h>
 #include <stdbool.h>
@@ -66,25 +78,17 @@ InitConsole(void)
 
 int main(void)
 {
-    //Var for the input GPIO
-    //int32_t i32Val;
     //Using Sequencer 1 of FIFO size = 4, hence creating an array to store its data
-    uint32_t ui32ADC0Value[1];
+    uint32_t ui32ADC0Value[4];
+    //Variable to store final (averaged temperature)
     uint32_t ui32TempValueC;
-    // var for storing the average of the temperature.
-/*    volatile uint32_t ui32TempAvg; //volatile makes them un-optimizable for the compiler
-    volatile uint32_t ui32TempValueC;
-    volatile uint32_t ui32TempValueF;
-*/
+
     // Set up the serial console to use for displaying messages.
     InitConsole();
     // Display the setup on the console.
     UARTprintf("TEMPERATURE: ->\n");
-    //UARTprintf("  Module: PWM0\n");
-    //UARTprintf("  Pin(s): PD0 and PD1\n");
 
-
-    //Set up the system clock again to run at 40MHz
+    //Set up the system clock to run at 40MHz
     /* # PLL runs on 400 MHz
      * -- this frequency is divided by 2 by default
      * -- additional dividing factors between 5 & 25 can be used
@@ -94,28 +98,16 @@ int main(void)
      * -Run it at 16 MHz
      */
     SysCtlClockSet(SYSCTL_SYSDIV_5|SYSCTL_USE_PLL|SYSCTL_OSC_MAIN|SYSCTL_XTAL_16MHZ);
+
     //Enable the ADC0
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
     // Wait for the ADC module to be ready.
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0))
     {}
 
-
     //Enable the PE3 to be an input pin
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);   //Enables the clock to PORT E
-    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);
-    // Wait for the GPIOA module to be ready.
-    //while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA))
-    //{}
-    //Register the port level interrupt handler for all the pin interrupts
-    //GPIOIntRegister(GPIO_PORTE_BASE, PortEIntHandler);
-
-    /* PE_2 : INPUT PIN
-     * PE_3 : ADC INPUT PIN
-     */
-    //GPIOPinTypeGPIOInput(GPIO_PORTE_BASE,GPIO_PIN_2);
-    //Setting the GPIO multiplexer function for the ADC input
-    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);
+    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);    //Defines the multiplexing role of the GPIO used
 
     /* Configuring the ADC sequencer (AND NOT TRIGGER!):-
      * ->Use ADC0 (STEP 1)
@@ -124,17 +116,17 @@ int main(void)
      * ->Use the highest priority (STEP 4)
      * # allow the ADC12 to run at its default rate of 1Msps
      */
-    ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
+    ADCSequenceConfigure(ADC0_BASE, 1, ADC_TRIGGER_PROCESSOR, 0);
 
     //Next we need to configure all four steps in the ADC sequencer
-    //ADCSequenceStepConfigure(ADC0_BASE, 1, 0, ADC_CTL_CH0);
-   // ADCSequenceStepConfigure(ADC0_BASE, 1, 1, ADC_CTL_CH0);
-    //ADCSequenceStepConfigure(ADC0_BASE, 1, 2, ADC_CTL_CH0);
+    ADCSequenceStepConfigure(ADC0_BASE, 1, 0, ADC_CTL_CH0);
+    ADCSequenceStepConfigure(ADC0_BASE, 1, 1, ADC_CTL_CH0);
+    ADCSequenceStepConfigure(ADC0_BASE, 1, 2, ADC_CTL_CH0);
     // Perform last step and set the interrupt flag (ADC_CTL_IE) as the last sample is done.
     // Also, tell the ADC logic that this is the last conversion on SS1 (ADC_CTL_END)
-    ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_CH0 | ADC_CTL_IE | ADC_CTL_END);
+    ADCSequenceStepConfigure(ADC0_BASE, 1, 3, ADC_CTL_CH0 | ADC_CTL_IE | ADC_CTL_END);
     //Enabling the SS1 (AND NOT TRIGGER!)
-    ADCSequenceEnable(ADC0_BASE, 3);
+    ADCSequenceEnable(ADC0_BASE, 1);
 
     //Clearing the ADC interrupt status flag
     ADCIntClear(ADC0_BASE, 1);
@@ -142,31 +134,22 @@ int main(void)
     //An infinite loop
     while(1)
     {
-        //Read pin PE_2
-        //i32Val = GPIOPinRead(GPIO_PORTE_BASE,GPIO_PIN_2);
-        //GPIOPinRead(GPIO_PORTE_BASE, GPIO_PIN_3);
-
         //Trigger the ADC conversion
-        ADCProcessorTrigger(ADC0_BASE, 3);
+        ADCProcessorTrigger(ADC0_BASE, 1);
         //Get the current Interrupt status | false indicates that "raw" interrupt status is reqd and not "masked"
         //And wait until the status comes out to be 1 . i.e, the conversion is complete
-        while(!ADCIntStatus(ADC0_BASE, 3, false))
+        while(!ADCIntStatus(ADC0_BASE, 1, false))
         { }
 
         // Clear the ADC interrupt flag.
-        ADCIntClear(ADC0_BASE, 3);
+        ADCIntClear(ADC0_BASE, 1);
         //Copy the ADC values from the SS1 into a buffer. SS1 -> (array)ui32ADC0Value
-        ADCSequenceDataGet(ADC0_BASE, 3, ui32ADC0Value);
+        ADCSequenceDataGet(ADC0_BASE, 1, ui32ADC0Value);
 
-        ui32TempValueC = ui32ADC0Value[0]/10;
-        //ui32TempAvg = (ui32ADC0Value[0] + ui32ADC0Value[1] + ui32ADC0Value[2] + ui32ADC0Value[3] + 2)/4;    //2 is for rounding
-        //TEMP = 147.5 – ((75 * (VREFP – VREFN) * ADCVALUE) / 4096) | We need to multiply everything by 10 to stay within the precision needed
-        //ui32TempValueC = (1475 - ((2475 * ui32TempAvg)) / 4096)/10;
-        //ui32TempValueF = ((ui32TempValueC * 9) + 160) / 5;
+        //As per the datasheet of LM35D, the IC provides the output, already calibrated in Celsius
+        //Temp = ADC value / 10
+        ui32TempValueC = (ui32ADC0Value[0] + ui32ADC0Value[1] + ui32ADC0Value[2] + ui32ADC0Value[3])/40;  //10 * 4 (for averaging)
+
         UARTprintf("Temperature = %3d*C \r", ui32TempValueC);
-/*        UARTprintf("%u",&ui32ADC0Value[0]);UARTprintf("\t");
-        UARTprintf("%u",&ui32ADC0Value[1]);UARTprintf("\t");
-        UARTprintf("%u",&ui32ADC0Value[2]);UARTprintf("\t");
-        UARTprintf("%u",&ui32ADC0Value[3]);*/
     }
 }
